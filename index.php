@@ -6,10 +6,10 @@ class Task {
     private $status;
     private $assigner;
 
-    public function __construct($titre, $description) {
+    public function __construct($titre, $description, $status = 'to_do') {
         $this->titre = $titre;
         $this->description = $description;
-        $this->status = 'to_do';
+        $this->status = $status;
         $this->assigner = null;
     }
 
@@ -58,8 +58,8 @@ class Task {
 class Bug extends Task {
     private $priority;
 
-    public function __construct($titre, $description, $priority) {
-        parent::__construct($titre, $description);
+    public function __construct($titre, $description, $priority, $status = 'to_do') {
+        parent::__construct($titre, $description, $status);
         $this->setPriority($priority);
     }
 
@@ -80,8 +80,8 @@ class Bug extends Task {
 class Feature extends Task {
     private $deadline;
 
-    public function __construct($titre, $description, $deadline) {
-        parent::__construct($titre, $description);
+    public function __construct($titre, $description, $deadline, $status = 'to_do') {
+        parent::__construct($titre, $description, $status);
         $this->deadline = $deadline;
     }
 
@@ -160,6 +160,35 @@ class Database {
         $stmt = $this->connect()->prepare($sql);
         $stmt->execute([':status' => $status, ':id' => $id]);
     }
+}
+
+public function saveTaskFromForm($title, $description, $type, $priority, $extra, $status) {
+    try {
+        if ($type === 'bug' && !$priority) {
+            throw new Exception("Priorité non définie !");
+        }
+
+        if ($type === 'bug' && !in_array($priority, ['Low', 'Medium', 'High'])) {
+            throw new Exception("Priorité invalide !");
+        }
+
+        // Création de la tâche selon le type
+        if ($type === 'bug') {
+            $task = new Bug($title, $description, $priority, $status); // Ajout du statut
+            $this->saveBug($task);
+        } elseif ($type === 'feature') {
+            $task = new Feature($title, $description, $extra, $status); // Ajout du statut
+            $this->saveFeature($task);
+        } else {
+            $task = new Task($title, $description, $status); // Ajout du statut
+            $this->saveTask($task);
+        }
+
+        return "Tâche créée avec succès !";
+    } catch (Exception $e) {
+        return $e->getMessage();
+    }
+}
 }
 ?>
 
@@ -271,46 +300,30 @@ class Database {
                 <input type="date" id="deadline" name="extra">
             </div>
 
+            <label for="status">Statut :</label>
+            <select id="status" name="status">
+                <option value="to_do">À faire</option>
+                <option value="in_progress">En cours</option>
+                <option value="done">Terminé</option>
+            </select>
             <button type="submit">Créer</button>
         </form>
     </div>
 
     <?php
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $title = $_POST['title'];
-        $description = $_POST['description'];
-        $type = $_POST['type'];
-        $priority = $_POST['priority'] ?? null;
-        $extra = $_POST['extra'] ?? null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title = $_POST['title'];
+    $description = $_POST['description'];
+    $type = $_POST['type'];
+    $priority = $_POST['priority'] ?? null;
+    $extra = $_POST['extra'] ?? null;
+    $status = $_POST['status']; 
 
-        $db = new Database();
+    $db = new Database();
+    $result = $db->saveTaskFromForm($title, $description, $type, $priority, $extra, $status);
 
-        try {
-
-            if ($type === 'bug' && !$priority) {
-                throw new Exception("Priorite non définie !");
-            }
-
-            if ($type === 'bug' && !in_array($priority, ['Low', 'Medium', 'High'])) {
-                throw new Exception("Priorité invalide !");
-            }
-
-            if ($type === 'bug') {
-                $task = new Bug($title, $description, $priority);
-                $db->saveBug($task);
-            } elseif ($type === 'feature') {
-                $task = new Feature($title, $description, $extra);
-                $db->saveFeature($task);
-            } else {
-                $task = new Task($title, $description);
-                $db->saveTask($task);
-            }
-
-            echo "<script>alert('Tâche créée avec succès !');</script>";
-        } catch (Exception $e) {
-            echo "<script>alert('" . $e->getMessage() . "');</script>";
-        }
-    }
+    echo "<script>alert('$result');</script>";
+}
     ?>
 </body>
 </html>
