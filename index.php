@@ -1,4 +1,5 @@
 <?php
+require 'database.php';
 class Task {
     private $id;
     private $titre;
@@ -6,189 +7,99 @@ class Task {
     private $status;
     private $assigner;
 
-    public function __construct($titre, $description, $status = 'to_do') {
+    public function __construct($titre, $description, $status = 'a faire', $assigner = null) {
         $this->titre = $titre;
         $this->description = $description;
         $this->status = $status;
-        $this->assigner = null;
+        $this->assigner = $assigner;
     }
 
-    public function getId() {
-        return $this->id;
-    }
+    public function getId() { return $this->id; }
+    public function getTitre() { return $this->titre; }
+    public function getDescription() { return $this->description; }
+    public function getStatus() { return $this->status; }
+    public function getAssigner() { return $this->assigner; }
 
-    public function getTitre() {
-        return $this->titre;
-    }
-
-    public function getDescription() {
-        return $this->description;
-    }
-
-    public function getStatus() {
-        return $this->status;
-    }
-
-    public function getAssigner() {
-        return $this->assigner;
-    }
-
-    public function setTitre($titre) {
-        $this->titre = $titre;
-    }
-
-    public function setDescription($description) {
-        $this->description = $description;
-    }
-
+    public function setTitre($titre) { $this->titre = $titre; }
+    public function setDescription($description) { $this->description = $description; }
     public function setStatus($status) {
-        $validStatuses = ['to_do', 'in_progress', 'done'];
+        $validStatuses = ['a faire', 'en cours', 'done'];
         if (in_array($status, $validStatuses)) {
             $this->status = $status;
         } else {
-            throw new Exception("Invalid status");
+            throw new Exception("Statut invalide");
         }
     }
-
-    public function assignTo($user) {
-        $this->assigner = $user;
-    }
+    public function assignTo($user) { $this->assigner = $user; }
 }
 
 class Bug extends Task {
     private $priority;
 
-    public function __construct($titre, $description, $priority, $status = 'to_do') {
-        parent::__construct($titre, $description, $status);
+    public function __construct($titre, $description, $priority, $status = 'a faire', $assigner = null) {
+        parent::__construct($titre, $description, $status, $assigner);
         $this->setPriority($priority);
     }
 
-    public function getPriority() {
-        return $this->priority;
-    }
-
+    public function getPriority() { return $this->priority; }
     public function setPriority($priority) {
         $validPriorities = ['Low', 'Medium', 'High'];
         if (in_array($priority, $validPriorities)) {
             $this->priority = $priority;
         } else {
-            throw new Exception("Invalid priority");
+            throw new Exception("Priorité invalide");
         }
+    }
+    public function saveToDatabase(Database $db) {
+        $db->saveBug($this);
     }
 }
 
 class Feature extends Task {
     private $deadline;
 
-    public function __construct($titre, $description, $deadline, $status = 'to_do') {
-        parent::__construct($titre, $description, $status);
+    public function __construct($titre, $description, $deadline, $status = 'a faire', $assigner = null) {
+        parent::__construct($titre, $description, $status, $assigner);
         $this->deadline = $deadline;
     }
 
-    public function getDeadline() {
-        return $this->deadline;
-    }
-
-    public function setDeadline($deadline) {
-        $this->deadline = $deadline;
+    public function getDeadline() { return $this->deadline; }
+    public function setDeadline($deadline) { $this->deadline = $deadline; }
+    public function saveToDatabase(Database $db) {
+        $db->saveFeature($this);
     }
 }
 
-class Database {
-    private $host = 'localhost';
-    private $dbname = 'tasks';
-    private $username = 'root';
-    private $password = '';
-    private $connection;
 
-    public function connect() {
-        if (!$this->connection) {
-            try {
-                $this->connection = new PDO("mysql:host=$this->host;dbname=$this->dbname", $this->username, $this->password);
-                $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            } catch (PDOException $e) {
-                die("Erreur de connexion à la base de données : " . $e->getMessage());
-            }
-        }
-        return $this->connection;
-    }
 
-    public function saveTask(Task $task) {
-        $sql = "INSERT INTO tasks (titre, description, status, assigner) VALUES (:titre, :description, :status, :assigner)";
-        $stmt = $this->connect()->prepare($sql);
-        $stmt->execute([
-            ':titre' => $task->getTitre(),
-            ':description' => $task->getDescription(),
-            ':status' => $task->getStatus(),
-            ':assigner' => $task->getAssigner()
-        ]);
-    }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['title'], $_POST['description'], $_POST['status'], $_POST['assigner'], $_POST['type'])) {
+        $db = new Database();
+        
+        $title = $_POST['title'];
+        $description = $_POST['description'];
+        $status = $_POST['status'];
+        $assigner = $_POST['assigner'];
+        $type = $_POST['type'];
 
-    public function saveBug(Bug $bug) {
-        $sql = "INSERT INTO bugs (titre, description, priority, status, assigner) VALUES (:titre, :description, :priority, :status, :assigner)";
-        $stmt = $this->connect()->prepare($sql);
-        $stmt->execute([
-            ':titre' => $bug->getTitre(),
-            ':description' => $bug->getDescription(),
-            ':priority' => $bug->getPriority(),
-            ':status' => $bug->getStatus(),
-            ':assigner' => $bug->getAssigner()
-        ]);
-    }
+        if ($type === 'bug' && isset($_POST['priority'])) {
+            $task = new Bug($title, $description, $_POST['priority'], $status, $assigner);
+            $task->saveToDatabase($db);
+            header("Location: taches.php");
+            
+        } elseif ($type === 'feature' && isset($_POST['deadline'])) {
+            $task = new Feature($title, $description, $_POST['deadline'], $status, $assigner);
+            $task->saveToDatabase($db);
+            header("Location: taches.php");
 
-    public function saveFeature(Feature $feature) {
-        $sql = "INSERT INTO features (titre, description, deadline, status, assigner) VALUES (:titre, :description, :deadline, :status, :assigner)";
-        $stmt = $this->connect()->prepare($sql);
-        $stmt->execute([
-            ':titre' => $feature->getTitre(),
-            ':description' => $feature->getDescription(),
-            ':deadline' => $feature->getDeadline(),
-            ':status' => $feature->getStatus(),
-            ':assigner' => $feature->getAssigner()
-        ]);
-    }
-
-    public function getTasksByUser($user) {
-        $sql = "SELECT * FROM tasks WHERE assigner = :assigner";
-        $stmt = $this->connect()->prepare($sql);
-        $stmt->execute([':assigner' => $user]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function updateTaskStatus($id, $status) {
-        $sql = "UPDATE tasks SET status = :status WHERE id = :id";
-        $stmt = $this->connect()->prepare($sql);
-        $stmt->execute([':status' => $status, ':id' => $id]);
-    }
-}
-
-public function saveTaskFromForm($title, $description, $type, $priority, $extra, $status) {
-    try {
-        if ($type === 'bug' && !$priority) {
-            throw new Exception("Priorité non définie !");
-        }
-
-        if ($type === 'bug' && !in_array($priority, ['Low', 'Medium', 'High'])) {
-            throw new Exception("Priorité invalide !");
-        }
-
-        // Création de la tâche selon le type
-        if ($type === 'bug') {
-            $task = new Bug($title, $description, $priority, $status); // Ajout du statut
-            $this->saveBug($task);
-        } elseif ($type === 'feature') {
-            $task = new Feature($title, $description, $extra, $status); // Ajout du statut
-            $this->saveFeature($task);
         } else {
-            $task = new Task($title, $description, $status); // Ajout du statut
-            $this->saveTask($task);
-        }
+            $task = new Task($title, $description, $status, $assigner);
+            $db->saveTask($task);
+            header("Location: taches.php");
 
-        return "Tâche créée avec succès !";
-    } catch (Exception $e) {
-        return $e->getMessage();
+        }
     }
-}
+    
 }
 ?>
 
@@ -197,133 +108,89 @@ public function saveTaskFromForm($title, $description, $type, $priority, $extra,
 <head>
     <meta charset="UTF-8">
     <title>TaskFlow</title>
-    <link rel="stylesheet" href="styles/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        function togglePriorityField() {
-            const type = document.getElementById('type').value;
-            const priorityField = document.getElementById('priorityField');
-            const deadlineField = document.getElementById('deadlineField');
-            if (type === 'bug') {
-                priorityField.style.display = 'block';
-                deadlineField.style.display = 'none';
-            } else if (type === 'feature') {
-                deadlineField.style.display = 'block';
-                priorityField.style.display = 'none';
-            } else {
-                priorityField.style.display = 'none';
-                deadlineField.style.display = 'none';
-            }
+        function toggleFields() {
+            var type = document.getElementById("type").value;
+            document.getElementById("priorityField").style.display = (type === "bug") ? "block" : "none";
+            document.getElementById("deadlineField").style.display = (type === "feature") ? "block" : "none";
         }
     </script>
-    <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f4f6f9;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            width: 50%;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-            font-size: 28px;
-        }
-        .task-form {
-            display: flex;
-            flex-direction: column;
-        }
-        .task-form label {
-            margin: 10px 0 5px;
-            color: #555;
-        }
-        .task-form input,
-        .task-form textarea,
-        .task-form select {
-            padding: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        .task-form button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 18px;
-        }
-        .task-form button:hover {
-            background-color: #45a049;
-        }
-        #priorityField, #deadlineField {
-            display: none;
-        }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <h1>Créer une Tâche</h1>
-        <form action="" method="POST" class="task-form">
-            <label for="title">Titre :</label>
-            <input type="text" id="title" name="title" required>
+<header class='flex shadow-md py-4 px-4 sm:px-10 bg-white font-[sans-serif] min-h-[70px] tracking-wide relative z-50'>
+      <div class='flex flex-wrap items-center justify-between gap-5 w-full'>
 
-            <label for="description">Description :</label>
-            <textarea id="description" name="description" rows="4" required></textarea>
+        <div id="collapseMenu"
+          class='max-lg:hidden lg:!block max-lg:before:fixed max-lg:before:bg-black max-lg:before:opacity-50 max-lg:before:inset-0 max-lg:before:z-50'>
+          <button id="toggleClose" class='lg:hidden fixed top-2 right-4 z-[100] rounded-full bg-white w-9 h-9 flex items-center justify-center border'>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 fill-black" viewBox="0 0 320.591 320.591">
+              <path
+                d="M30.391 318.583a30.37 30.37 0 0 1-21.56-7.288c-11.774-11.844-11.774-30.973 0-42.817L266.643 10.665c12.246-11.459 31.462-10.822 42.921 1.424 10.362 11.074 10.966 28.095 1.414 39.875L51.647 311.295a30.366 30.366 0 0 1-21.256 7.288z"
+                data-original="#000000"></path>
+              <path
+                d="M287.9 318.583a30.37 30.37 0 0 1-21.257-8.806L8.83 51.963C-2.078 39.225-.595 20.055 12.143 9.146c11.369-9.736 28.136-9.736 39.504 0l259.331 257.813c12.243 11.462 12.876 30.679 1.414 42.922-.456.487-.927.958-1.414 1.414a30.368 30.368 0 0 1-23.078 7.288z"
+                data-original="#000000"></path>
+            </svg>
+          </button>
 
-            <label for="type">Type :</label>
-            <select id="type" name="type" onchange="togglePriorityField()">
-                <option value="simple">Simple</option>
+          <ul
+            class='lg:flex gap-x-5 max-lg:space-y-3 max-lg:fixed max-lg:bg-white max-lg:w-1/2 max-lg:min-w-[300px] max-lg:top-0 max-lg:left-0 max-lg:p-6 max-lg:h-full max-lg:shadow-md max-lg:overflow-auto z-50'>
+            <li class='max-lg:border-b border-gray-300 max-lg:py-3 px-3'>
+              <a href='index.php'
+                class='hover:text-[#007bff] text-[#007bff] block font-semibold text-[15px]'>Creer task</a>
+            </li>
+            <li class='max-lg:border-b border-gray-300 max-lg:py-3 px-3'><a href='taches.php'
+              class='hover:text-[#007bff] text-gray-500 block font-semibold text-[15px]'>Consulter tasks</a>
+            </li>
+          </ul>
+        </div>
+        
+      </div>
+    </header>
+<body class="bg-gray-100 text-gray-800 font-sans">
+    <div class="container mx-auto p-6 w-[80%]">
+        <form action="" method="POST" class="bg-white p-6 rounded-lg shadow-lg grid ">
+            <div class="grid grid-cols-[20%70%]">
+            <label for="title" class="block text-lg font-medium">Titre :</label>
+            <input type="text" id="title" name="title" required class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <label for="description" class="block text-lg font-medium">Description :</label>
+            <textarea id="description" name="description" rows="4" required class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            
+            <label for="status" class="block text-lg font-medium">Statut :</label>
+            <select id="status" name="status" class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="a faire">À faire</option>
+                <option value="en cours">En cours</option>
+                <option value="done">Terminé</option>
+            </select>
+            
+            <label for="assigner" class="block text-lg font-medium">Assigné à :</label>
+            <input type="text" id="assigner" name="assigner" class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <label for="type" class="block text-lg font-medium">Type de tâche :</label>
+            <select id="type" name="type" onchange="toggleFields()" class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="task">Tâche normale</option>
                 <option value="bug">Bug</option>
                 <option value="feature">Feature</option>
             </select>
-
-            <div id="priorityField" style="display:none;">
-                <label for="priority">Priorité :</label>
-                <select id="priority" name="priority">
+            
+            <div id="priorityField" class="hidden ">
+                <label for="priority" class="block text-lg font-medium">Priorité :</label>
+                <select id="priority" name="priority" class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="Low">Low</option>
                     <option value="Medium">Medium</option>
                     <option value="High">High</option>
                 </select>
             </div>
 
-            <div id="deadlineField" style="display:none;">
-                <label for="deadline">Deadline :</label>
-                <input type="date" id="deadline" name="extra">
+            <div id="deadlineField" class="hidden">
+                <label for="deadline" class="block text-lg font-medium">Deadline :</label>
+                <input type="date" id="deadline" name="deadline" class="w-full p-3 mb-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
-
-            <label for="status">Statut :</label>
-            <select id="status" name="status">
-                <option value="to_do">À faire</option>
-                <option value="in_progress">En cours</option>
-                <option value="done">Terminé</option>
-            </select>
-            <button type="submit">Créer</button>
+            </div>
+            <button type="submit" class="w-[45%] bg-green-700 text-white m-auto p-3  rounded-md hover:bg-green-800 transition duration-300">Créer</button>
         </form>
     </div>
-
-    <?php
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = $_POST['title'];
-    $description = $_POST['description'];
-    $type = $_POST['type'];
-    $priority = $_POST['priority'] ?? null;
-    $extra = $_POST['extra'] ?? null;
-    $status = $_POST['status']; 
-
-    $db = new Database();
-    $result = $db->saveTaskFromForm($title, $description, $type, $priority, $extra, $status);
-
-    echo "<script>alert('$result');</script>";
-}
-    ?>
+   
 </body>
 </html>
